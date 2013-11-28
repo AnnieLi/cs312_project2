@@ -35,17 +35,19 @@ valid_card(X) :- room(X).
 % Game setup
 clue :- write('Welcome!'),nl.
 
-% my cards
-:-dynamic mycards/1.
-
 % played_char(X) is true if character is being played as by a player
 :-dynamic my_char/1.
 :-dynamic played_char/1.
 
+% has_card(Player, Card) is true if Player (represented by a character) has Card
+:-dynamic has_card/2.
+
 % next_player(X,Y) is true if X is the player to the immediate left of Y
 :-dynamic next_player/2.
-% This predicate is used to save the last user input
+
+% These predicate are used to save some variables
 :-dynamic last_input/1.
+:-dynamic last_menu_size/1.
 
 % Returns the index (1-based) of an element in a list, -1 if element is not in the list
 index_of(X, List, -1) :- not(member(X, List)), !.
@@ -59,9 +61,10 @@ index_zip([Hd|Tl], [[Start,Hd]|Ts], Start) :- N_Start is Start + 1, index_zip(Tl
 
 
 % Game setup menu
-setup :- cleanup, record_my_char, record_played_char, record_order.
+setup :- cleanup, record_my_char, record_played_char, record_order, record_my_cards.
 
 read_input(Input) :- retractall(last_input(_)), read(Input), assert(last_input(Input)).
+save_menu_size(Num_choices) :- retractall(last_menu_size(_)), assert(last_menu_size(Num_choices)).
 
 cleanup :- retractall(played_char(_)),
   retractall(next_player(_,_)),
@@ -76,34 +79,43 @@ record_my_char :- write('Which character are you playing?'), nl,
   assert(my_char(My_C)), assert(played_char(My_C));
   write('Not a valid option'), nl, record_my_char.
 
-record_played_char :- write('Which other character is being played?'), nl,
+record_played_char :- write('Which other characters are being played?'), nl,
   findall(C, (character(C), not(played_char(C))), Not_played),
   length(Not_played, Num_choices),
+  save_menu_size(Num_choices),
   index_zip(Not_played, Ts, 0),
   foreach(member(T, Ts), writef("%d. %d\n", T)),
   writef("%d. None of the above\n", [Num_choices]),
   read_input(N), N > -1, N < Num_choices, nth0(N, Not_played, Played),
   assert(played_char(Played)), record_played_char;
-  last_input(N), !, findall(C, (character(C), not(played_char(C))), Not_played),
-  length(Not_played, Num_choices), Num_choices =:= N;
+  last_input(N), last_menu_size(Num_choices), Num_choices =:= N, Num_choices =< 4;
+  last_input(N), last_menu_size(Num_choices), Num_choices =:= N, Num_choices > 4,
+  write('There must be at least one other player'), nl, record_played_char;
   write('Not a valid option'), nl, record_played_char.
 
 record_order :- foreach((played_char(C), not(next_player(_, C))), record_next_player(C)).
 record_next_player(P) :- findall(C, (played_char(C), not(next_player(C, _)), C \== P), No_prevs),
   length(No_prevs, Num_choices),
-  Num_choices =\= 1,
+  save_menu_size(Num_choices),
+  Num_choices > 1,
   writef('Who is the player to the left of %d?', [P]), nl,
   index_zip(No_prevs, Ts, 0),
   foreach(member(T, Ts), writef("%d. %d\n", T)),
   read(N), N > -1, N < Num_choices, nth0(N, No_prevs, Next),
   assert(next_player(Next, P));
-  findall(C, (played_char(C), not(next_player(C, _)), C \== P), No_prevs),
-  length(No_prevs, Num_choices), Num_choices =:= 1,
-  played_char(C), not(next_player(C, _)), !, assert(next_player(C, P));
+  last_menu_size(Num_choices), Num_choices =:= 1,
+  played_char(C), not(next_player(C, _)), C \== P, ! , assert(next_player(C, P));
   write('Not a valid option'), nl, record_order.
 
 record_my_cards :- write('What are your cards?'),nl,
-	read(C), valid_card(C),assert(mycards(C)), record_my_cards;
-	write('Not a valid card,please try again!'),nl,
-	record_my_cards.
+  findall(C, (valid_card(C), not(has_card(_, C))), Not_mine),
+  length(Not_mine, Num_choices),
+  save_menu_size(Num_choices),
+  index_zip(Not_mine, Ts, 0),
+  foreach(member(T, Ts), writef("%d. %d\n", T)),
+  writef("%d. None of the above\n", [Num_choices]),
+  read_input(N), N > -1, N < Num_choices, nth0(N, Not_mine, Mine),
+  my_char(Me), !, assert(has_card(Me, Mine)), record_my_cards;
+  last_input(N), last_menu_size(Num_choices), Num_choices =:= N;
+  write('Not a valid option'), nl, record_my_cards.
 
