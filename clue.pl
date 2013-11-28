@@ -7,6 +7,10 @@
 % game, allow the user to see the contents of the database and know when
 % to make an accusation.
 %
+% The suspects are represented by their last names. The weapons are
+% represented by one word (for example "leedpipe").The rooms are
+% represented by the first word (for example "billiard").
+%
 % How to use: compile in SWI-Prolog, and type "clue."
 
 
