@@ -90,12 +90,15 @@ index_zip([Hd|Tl], [[Start,Hd]|Ts], Start) :- N_Start is Start + 1, index_zip(Tl
 setup :-
   cleanup,record_num_players, record_my_char, record_played_char, record_order, record_my_cards, !.
 
+% Record input
 read_input(At, Input) :-
   retractall(last_input(At, _)), read(Input), assert(last_input(At, Input)).
 
+% Record choices
 save_num_choices(At, Num_choices) :-
   retractall(last_num_choices(At, _)), assert(last_num_choices(At, Num_choices)).
 
+% Select from a list of options
 select_from_list(List, Sel, At) :-
   index_zip(List, Ts, 0),
   length(List, Len),
@@ -103,6 +106,7 @@ select_from_list(List, Sel, At) :-
   foreach(member(T, Ts), writef("%d. %d\n", T)),
   read_input(At, N), N  >= 0, N < Len, nth0(N, List, Sel).
 
+% Select the option "None of the above"
 select_from_list_none(List, Sel, At) :-
   index_zip(List, Ts, 0),
   length(List, Len),
@@ -111,11 +115,13 @@ select_from_list_none(List, Sel, At) :-
   writef("%d. None of the above\n", [Len]),
   read_input(At, N), N  >= 0, N < Len, nth0(N, List, Sel).
 
+% Record the number of players
 record_num_players :-
 	write('How many players? (from 2 to 6)'), nl,
 	read(N), N>=2, N =< 6, assert(num_players(N)), nl;
 	write('Not a valid option'),nl,nl, record_num_players.
 
+% Record the user's character
 record_my_char :-
   write('Which suspect are you playing?'), nl,
   findall(C, suspect(C), Cs),
@@ -123,6 +129,7 @@ record_my_char :-
   assert(my_char(My_char)), assert(played_char(My_char)), nl;
   write('Not a valid option'), nl, nl, record_my_char.
 
+% Record other players
 record_played_char :-
   num_players(6), foreach((suspect(C), not(my_char(C))), assert(played_char(C))).
 record_played_char :-
@@ -134,6 +141,7 @@ record_played_char :-
   assert(played_char(Played)), nl, record_played_char;
   write('Not a valid option'), nl, nl, record_played_char.
 
+% Record the order
 record_order :-
   findall(C, played_char(C), Played), length(Played, Num_played), Num_played =:= 2,
   foreach((played_char(C), not(next_player(_,   C))), record_order_2_players(C)), nl.
@@ -153,8 +161,8 @@ record_next_player_from_list(P, List) :-
   select_from_list(List, Next, record_next_player_from_list),
   assert(next_player(Next, P)), nl;
   write('Not a valid option'), nl, nl, record_next_player_from_list(P, List).
-  
 
+% Record the user's cards
 record_my_cards :-
   write('What are your cards?'),nl,
   findall(C, (valid_card(C), not(has_card(_, C))), Not_mine),
@@ -166,6 +174,7 @@ record_my_cards :-
   last_input(record_my_cards, N), last_num_choices(record_my_cards, Num_choices), Num_choices =:= N, nl;
   write('Not a valid option'), nl, nl, record_my_cards.
 
+% Missing card
 missing(Card) :-
   missing_weapon(Card);
   missing_room(Card);
@@ -178,17 +187,19 @@ missing_room(R) :-
 missing_suspect(S) :-
   suspect(S), not(envelope_suspect(S)), not(has_card(_, S)).
 
+% Murder solved, show deduced cards in the envelope
 solved :-
   envelope_weapon(What), weapon(What),
   envelope_room(Where), room(Where),
   envelope_suspect(Who), suspect(Who),
   writef("Hey, all that's left is %d, the %d, and the %d!\n", [Who, What, Where]), nl, !.
 
+% Deduce the cards in the envelope
 deduce_in_envelope :-
   deduce_in_envelope_weapon,
   deduce_in_envelope_room,
   deduce_in_envelope_suspect.
- 
+
 deduce_in_envelope_weapon :-
   not(envelope_weapon(_)), !;
   findall(C, missing_weapon(C), Cs),
@@ -204,7 +215,7 @@ deduce_in_envelope_room :-
   missing_room(C),
   assert(envelope_room(C)),
   writef("Inferred that %d is the envelope room\n", [C]).
-  
+
 deduce_in_envelope_suspect :-
   not(envelope_suspect(_)), !;
   findall(C, missing_suspect(C), Cs),
@@ -213,6 +224,7 @@ deduce_in_envelope_suspect :-
   assert(envelope_suspect(C)),
   writef("Inferred that %d is the envelope suspect\n", [C]).
 
+% The options the game assistant can do
 main_menu_option(print_database).
 main_menu_option(record_my_suggestion).
 main_menu_option(record_others_suggestion).
@@ -233,34 +245,40 @@ option_function(record_others_suggestion) :-
 option_function(quit) :-
   write('Bye bye'), nl, nl.
 
-print_card_list(P) :- 
+% Show the user's cards
+print_card_list(P) :-
   my_char(P),
   writef('  You as %d has the following cards:\n', [P]),
   print_suspect_list(P),
   print_room_list(P),
   print_weapon_list(P), nl.
 
+% Show other player's card
 print_card_list(P) :-
   writef('  Player %d has the following cards:\n', [P]),
   print_suspect_list(P),
   print_room_list(P),
   print_weapon_list(P), nl.
 
+% Show weapons
 print_weapon_list(P) :- findall(Card, (has_card(P, Card), weapon(Card)), Ws), length(Ws, 0).
 print_weapon_list(P) :-
   write('    Weapons:\n      '),
   foreach((has_card(P, Card), weapon(Card)), writef('%d ', [Card])), nl.
 
+% Show rooms
 print_room_list(P) :- findall(Card, (has_card(P, Card), room(Card)), Ws), length(Ws, 0).
 print_room_list(P) :-
   write('    Rooms:\n      '),
   foreach((has_card(P, Card), room(Card)), writef('%d ', [Card])), nl.
 
+% Show suspects
 print_suspect_list(P) :- findall(Card, (has_card(P, Card), suspect(Card)), Ws), length(Ws, 0).
 print_suspect_list(P) :-
   write('    Suspects:\n      '),
   foreach((has_card(P, Card), suspect(Card)), writef('%d ', [Card])), nl.
 
+% Make a suggestion
 i_suggested(Who, Where, What) :-
   write('Which suspect did you suggest?'), nl,
   findall(S, suspect(S), Ss),
@@ -273,6 +291,7 @@ i_suggested(Who, Where, What) :-
   select_from_list(Rs, Where, i_suggested), !, nl;
   write('Not a valid option'), nl, nl, i_suggested(Who, Where, What).
 
+% Record if any other player showed card
 i_learned(Who, Where, What) :-
   write('Did any other player show you a card?'), nl,
   findall(P, (played_char(P), my_char(Me), P \== Me), Others),
@@ -282,6 +301,7 @@ i_learned(Who, Where, What) :-
   nobody_shows_suspect(Who), nobody_shows_room(Where), nobody_shows_weapon(What), !;
   write('Not a valid option'), nl, nl, i_learn(Who, Where, What).
 
+% Record what card has been shown
 i_was_shown(Player, List) :-
   findall(C, (member(C, List), my_char(Me), not(has_card(Me, C))), Cards),
   writef('Which card did player %d show you?', [Player]), nl,
@@ -294,22 +314,25 @@ record_player_has_card(_, Card) :-
   not(missing(Card)), !.
 record_player_has_card(Player, Card) :-
   assert(has_card(Player, Card)).
-  
+
+% If nobody showed cards, the suggestion is correct
+
 nobody_shows_weapon(Card) :-
   not(missing(Card)), !;
-  assert(envelope_weapon(Card)), 
+  assert(envelope_weapon(Card)),
   writef("Inferred that %d is the envelope weapon\n", [Card]).
-  
+
 nobody_shows_room(Card) :-
   not(missing(Card)), !;
-  assert(envelope_room(Card)), 
+  assert(envelope_room(Card)),
   writef("Inferred that %d is the envelope room\n", [Card]).
-  
+
 nobody_shows_suspect(Card) :-
   not(missing(Card)), !;
-  assert(envelope_suspect(Card)), 
+  assert(envelope_suspect(Card)),
   writef("Inferred that %d is the envelope suspect\n", [Card]).
-  
+
+% Record other player's suggestion
 player_suggested(Player, Who, Where, What) :-
   write('Which player made the suggestion?'), nl,
   findall(P, (played_char(P), my_char(Me), P \== Me), Others),
@@ -325,6 +348,7 @@ player_suggested(Player, Who, Where, What) :-
   select_from_list(Rs, Where, player_suggested), !, nl;
   write('Not a valid option'), nl, nl, player_suggested(Player, Who, Where, What).
 
+% Information got from other player's suggestion
 i_observed(Player, Who, Where, What) :-
   writef('Did any other player show player %d a card?', [Player]), nl,
   findall(P, (played_char(P), P \== Player), Others),
@@ -333,8 +357,8 @@ i_observed(Player, Who, Where, What) :-
   last_num_choices(i_observed, Num_choices), last_input(i_observed, N), N =:= Num_choices,
   nobody_shows_suspect(Who), nobody_shows_room(Where), nobody_shows_weapon(What), !;
   write('Not a valid option'), nl, nl, i_observed(Player, Who, Where, What).
-  
 
+% The main menu with list of options the game assistant can do
 main_menu :-
   deduce_in_envelope, solved;
   write('Choose an option:'), nl,
