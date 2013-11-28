@@ -3,7 +3,7 @@
 % Student Number: 71680094, 34444109
 
 clue :-
-  setup, main_menu.
+  setup, !, main_menu.
 
 % Game cards
 suspect(mustard).
@@ -49,8 +49,8 @@ valid_card(X) :- room(X).
 :-dynamic next_player/2.
 
 % These predicate are used to save some variables
-:-dynamic last_input/1.
-:-dynamic last_menu_size/1.
+:-dynamic last_input/2.
+:-dynamic last_num_choices/2.
 
 % Returns the index (1-based) of an element in a list, -1 if element is not in the list
 index_of(X, List, -1) :- not(member(X, List)), !.
@@ -67,11 +67,11 @@ index_zip([Hd|Tl], [[Start,Hd]|Ts], Start) :- N_Start is Start + 1, index_zip(Tl
 setup :-
   cleanup,record_num_players, record_my_char, record_played_char, record_order, record_my_cards, !.
 
-read_input(Input) :-
-  retractall(last_input(_)), read(Input), assert(last_input(Input)).
+read_input(At, Input) :-
+  retractall(last_input(At, _)), read(Input), assert(last_input(At, Input)).
 
-save_menu_size(Num_choices) :-
-  retractall(last_menu_size(_)), assert(last_menu_size(Num_choices)).
+save_num_choices(At, Num_choices) :-
+  retractall(last_num_choices(At, _)), assert(last_num_choices(At, Num_choices)).
 
 cleanup :-
   retractall(num_players(_)),
@@ -79,42 +79,44 @@ cleanup :-
   retractall(played_char(_)),
   retractall(next_player(_,_)),
   retractall(has_card(_,_)),
-  retractall(last_input(_)),
-  retractall(last_menu_size(_)).
+  retractall(last_input(_,_)),
+  retractall(last_num_choices(_,_)).
 
-select_from_list(List, Sel) :-
+select_from_list(List, Sel, At) :-
   index_zip(List, Ts, 0),
   length(List, Len),
-  save_menu_size(Len),
+  save_num_choices(At, Len),
   foreach(member(T, Ts), writef("%d. %d\n", T)),
-  read_input(N), N  >= 0, N < Len, nth0(N, List, Sel).
+  read_input(At, N), N  >= 0, N < Len, nth0(N, List, Sel).
 
-select_from_list_none(List, Sel) :-
+select_from_list_none(List, Sel, At) :-
   index_zip(List, Ts, 0),
   length(List, Len),
-  save_menu_size(Len),
+  save_num_choices(At, Len),
   foreach(member(T, Ts), writef("%d. %d\n", T)),
   writef("%d. None of the above\n", [Len]),
-  read_input(N), N  >= 0, N < Len, nth0(N, List, Sel).
+  read_input(At, N), N  >= 0, N < Len, nth0(N, List, Sel).
 
 record_num_players :-
 	write('How many players? (from 2 to 6)'), nl,
-	read(N), N>=2, N<6, assert(num_players(N)), nl;
+	read(N), N>=2, N =< 6, assert(num_players(N)), nl;
 	write('Not a valid option'),nl,nl, record_num_players.
 
 record_my_char :-
   write('Which suspect are you playing?'), nl,
   findall(C, suspect(C), Cs),
-  select_from_list(Cs, My_char),
+  select_from_list(Cs, My_char, record_my_char),
   assert(my_char(My_char)), assert(played_char(My_char)), nl;
   write('Not a valid option'), nl, nl, record_my_char.
 
+record_played_char :-
+  num_players(6), foreach((suspect(C), not(my_char(C))), assert(played_char(C))).
 record_played_char :-
   findall(C, played_char(C), P), num_players(Need), length(P, Need).
 record_played_char :-
   findall(C, (suspect(C), not(played_char(C))), Not_played),
   write('Which are the other suspects being played?'), nl,
-  select_from_list(Not_played, Played),
+  select_from_list(Not_played, Played, record_played_char),
   assert(played_char(Played)), nl, record_played_char;
   write('Not a valid option'), nl, nl, record_played_char.
 
@@ -128,25 +130,32 @@ record_order_2_players(P) :-
   played_char(C), P \== C, assert(next_player(C, P)).
 record_next_player(P) :-
   findall(C, (played_char(C), C \== P, not(next_player(C, _)), not(next_player(P, C))), No_prevs),
-  length(No_prevs, Num_choices),
-  Num_choices > 1,
+  record_next_player_from_list(P, No_prevs).
+
+record_next_player_from_list(P, List) :-
+  length(List, 1), member(Next, List), !, assert(next_player(Next, P)).
+record_next_player_from_list(P, List) :-
   writef('Who is the player to the left of %d?', [P]), nl,
-  select_from_list(No_prevs, Next),
+  select_from_list(List, Next, record_next_player_from_list),
   assert(next_player(Next, P)), nl;
-  last_menu_size(Num_choices), Num_choices =:= 2,
-  played_char(C), C \= P, not(next_player(C, _)), not(next_player(P, C)), assert(next_player(C, P));
-  write('Not a valid option'), nl, nl, record_order.
+  write('Not a valid option'), nl, nl, record_next_player_from_list(P, List).
+  
 
 record_my_cards :-
   write('What are your cards?'),nl,
   findall(C, (valid_card(C), not(has_card(_, C))), Not_mine),
   length(Not_mine, Num_choices),
   Num_choices =\= 0,
-  select_from_list_none(Not_mine, Mine),
+  select_from_list_none(Not_mine, Mine, record_my_cards),
   my_char(Me), !, assert(has_card(Me, Mine)), nl, record_my_cards;
-  last_menu_size(Num_choices), Num_choices =:= 1, nl;
-  last_input(N), last_menu_size(Num_choices), Num_choices =:= N, nl;
+  last_num_choices(record_my_cards, Num_choices), Num_choices =:= 1, nl;
+  last_input(record_my_cards, N), last_num_choices(record_my_cards, Num_choices), Num_choices =:= N, nl;
   write('Not a valid option'), nl, nl, record_my_cards.
+
+missing(Card) :-
+  missing_weapon(Card);
+  missing_room(Card);
+  missing_suspect(Card).
 
 missing_weapon(W) :-
   weapon(W), not(has_card(_, W)).
@@ -170,43 +179,82 @@ main_menu_option(record_my_action).
 main_menu_option(quit).
 
 option_function(print_database) :-
+  write('So far we know:\n'),
   foreach(played_char(P), print_card_list(P)).
-option_function(record_my_char) :-
-  write('not implemented'), nl.
+
+option_function(record_my_action) :-
+  i_suggested(Who, Where, What),
+  i_learned(Who, Where, What).
+
 option_function(quit) :-
-  write('Bye bye'), nl, nl, !, clue.
+  write('Bye bye'), nl, nl.
+
+print_card_list(P) :- 
+  my_char(P),
+  writef(' You as %d has the following cards:\n', [P]),
+  print_suspect_list(P),
+  print_room_list(P),
+  print_weapon_list(P), nl.
 
 print_card_list(P) :-
-  writef('Player %d has the following cards:\n', [P]),
+  writef('  Player %d has the following cards:\n', [P]),
   print_suspect_list(P),
   print_room_list(P),
   print_weapon_list(P), nl.
 
 print_weapon_list(P) :- findall(Card, (has_card(P, Card), weapon(Card)), Ws), length(Ws, 0).
 print_weapon_list(P) :-
-  write(' weapons:'), nl,
-  foreach((has_card(P, Card), weapon(Card)), writef('   %d\n', [Card])).
+  write('   Weapons:'), nl,
+  foreach((has_card(P, Card), weapon(Card)), writef('    %d\n', [Card])).
 
 print_room_list(P) :- findall(Card, (has_card(P, Card), room(Card)), Ws), length(Ws, 0).
 print_room_list(P) :-
-  write(' rooms:'), nl,
-  foreach((has_card(P, Card), room(Card)), writef('   %d\n', [Card])).
+  write('   Rooms:'), nl,
+  foreach((has_card(P, Card), room(Card)), writef('    %d\n', [Card])).
 
 print_suspect_list(P) :- findall(Card, (has_card(P, Card), suspect(Card)), Ws), length(Ws, 0).
 print_suspect_list(P) :-
-  write(' suspects:'), nl,
-  foreach((has_card(P, Card), suspect(Card)), writef('   %d\n', [Card])).
+  write('   Suspects:'), nl,
+  foreach((has_card(P, Card), suspect(Card)), writef('     %d\n', [Card])).
 
 i_suggested(Who, Where, What) :-
-  my_char(Player), player_suggested(Player, Who, Where, What).
-%player_suggested(Player, Who, Where, What).
+  write('Which suspect did you suggest?'), nl,
+  findall(S, suspect(S), Ss),
+  select_from_list(Ss, Who, i_suggested), nl,
+  write('Which weapon did you suggest?'), nl,
+  findall(W, weapon(W), Ws),
+  select_from_list(Ws, What, i_suggested), nl,
+  write('Which room did you suggest?'), nl,
+  findall(R, room(R), Rs),
+  select_from_list(Rs, Where, i_suggested), nl.
+
+i_learned(Who, Where, What) :-
+  write('Did any other player show you a card?'), nl,
+  findall(P, (played_char(P), my_char(Me), P \== Me), Others),
+  select_from_list_none(Others, Player, i_learned), nl, i_was_shown(Player);
+  last_num_choices(i_learned, Num_choices), last_input(i_learned, N), N =:= Num_choices,
+  nobody_shows_card_for(Who, Where, What);
+  write('Not a valid option'), nl, nl, i_learn_from(Player).
+
+i_was_shown(Player) :-
+  writef('Which card did player %d show you?', [Player]), nl,
+  findall(C, missing(C), Missings),
+  select_from_list(Missings, Card, i_was_shown), nl,
+  assert(has_card(Player, Card));
+  write('Not a valid option'), nl, nl, i_was_shown(Player).
+  
+nobody_shows_card_for(Who, Where, What) :-
+  writef("Nobody showed anything when %d, %d, and %d was suggested\n", [Who, Where, What]).
+% player_suggested(Player, Who, Where, What).
   
 
 main_menu :-
   solved;
   write('Choose an option:'), nl,
   findall(Opt, main_menu_option(Opt), Options),
-  select_from_list(Options, Choice),
-  nl, option_function(Choice), nl, main_menu;
-  write('Not a valid option'), nl, nl, main_menu.
+  select_from_list(Options, Choice, main_menu),
+  nl, option_function(Choice), nl, Choice == quit, !;
+  last_input(main_menu, N), last_num_choices(main_menu, Num_choices),
+  N >= 0, N < Num_choices, !, main_menu;
+  write('Not a valid option'), nl, nl, !, main_menu.
 
