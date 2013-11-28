@@ -38,19 +38,40 @@ valid_card(X) :- room(X).
 % the number of all players
 :-dynamic num_players/1.
 
-% played_char(X) is true if suspect is being played as by a player
+% my_char(X) is true if suspect X is being played by the user
 :-dynamic my_char/1.
+
+% played_char(X) is true if suspect X is being played as by another player
 :-dynamic played_char/1.
 
 % has_card(Player, Card) is true if Player (represented by a suspect) has Card
 :-dynamic has_card/2.
 
+% envelope(Card) is true if Card is in the envelope (obviously)
+:-dynamic envelope_suspect/1.
+:-dynamic envelope_room/1.
+:-dynamic envelope_weapon/1.
+
 % next_player(X,Y) is true if X is the player to the immediate left of Y
 :-dynamic next_player/2.
 
-% These predicate are used to save some variables
+% These predicate are used to save some input and choices presented to the user
 :-dynamic last_input/2.
 :-dynamic last_num_choices/2.
+
+% Retract all dynamic predicates
+cleanup :-
+  retractall(num_players(_)),
+  retractall(my_char(_)),
+  retractall(played_char(_)),
+  retractall(has_card(_,_)),
+  retractall(envelope_weapon(_)),
+  retractall(envelope_room(_)),
+  retractall(envelope_suspect(_)),
+  retractall(next_player(_,_)),
+  retractall(last_input(_,_)),
+  retractall(last_num_choices(_,_)).
+
 
 % Returns the index (1-based) of an element in a list, -1 if element is not in the list
 index_of(X, List, -1) :- not(member(X, List)), !.
@@ -72,15 +93,6 @@ read_input(At, Input) :-
 
 save_num_choices(At, Num_choices) :-
   retractall(last_num_choices(At, _)), assert(last_num_choices(At, Num_choices)).
-
-cleanup :-
-  retractall(num_players(_)),
-  retractall(my_char(_)),
-  retractall(played_char(_)),
-  retractall(next_player(_,_)),
-  retractall(has_card(_,_)),
-  retractall(last_input(_,_)),
-  retractall(last_num_choices(_,_)).
 
 select_from_list(List, Sel, At) :-
   index_zip(List, Ts, 0),
@@ -158,21 +170,46 @@ missing(Card) :-
   missing_suspect(Card).
 
 missing_weapon(W) :-
-  weapon(W), not(has_card(_, W)).
+  weapon(W), not(envelope_weapon(W)), not(has_card(_, W)).
 missing_room(R) :-
-  room(R), not(has_card(_, R)).
+  room(R), not(envelope_room(R)), not(has_card(_, R)).
 missing_suspect(S) :-
-  suspect(S), not(has_card(_, S)).
+  suspect(S), not(envelope_suspect(S)), not(has_card(_, S)).
 
 solved :-
-  findall(W, missing_weapon(W), Ws),
-  length(Ws, Num_ws), Num_ws =:= 1,
-  findall(R, missing_room(R), Rs),
-  length(Rs, Num_rs), Num_rs =:= 1,
-  findall(S, missing_suspect(S), Ss),
-  length(Ss, Num_ss), Num_ss =:= 1,
-  missing_weapon(What), missing_room(Where), missing_suspect(Who),
+  envelope_weapon(What), weapon(What),
+  envelope_room(Where), room(Where),
+  envelope_suspect(Who), suspect(Who),
   writef("Hey, all that's left is %d, the %d, and the %d!\n", [Who, What, Where]), nl, !.
+
+deduce_in_envelope :-
+  deduce_in_envelope_weapon,
+  deduce_in_envelope_room,
+  deduce_in_envelope_suspect.
+ 
+deduce_in_envelope_weapon :-
+  not(envelope_weapon(_)), !;
+  findall(C, missing_weapon(C), Cs),
+  length(Cs, Len), Len > 1, !;
+  missing_weapon(C),
+  assert(envelope_weapon(C)),
+  writef("Inferred that %d is the envelope weapon\n", [C]).
+
+deduce_in_envelope_room :-
+  not(envelope_room(_)), !;
+  findall(C, missing_room(C), Cs),
+  length(Cs, Len), Len > 1, !;
+  missing_room(C),
+  assert(envelope_room(C)),
+  writef("Inferred that %d is the envelope room\n", [C]).
+  
+deduce_in_envelope_suspect :-
+  not(envelope_suspect(_)), !;
+  findall(C, missing_suspect(C), Cs),
+  length(Cs, Len), Len > 1, !;
+  missing_suspect(C),
+  assert(envelope_suspect(C)),
+  writef("Inferred that %d is the envelope suspect\n", [C]).
 
 main_menu_option(print_database).
 main_menu_option(record_my_action).
@@ -191,7 +228,7 @@ option_function(quit) :-
 
 print_card_list(P) :- 
   my_char(P),
-  writef(' You as %d has the following cards:\n', [P]),
+  writef('  You as %d has the following cards:\n', [P]),
   print_suspect_list(P),
   print_room_list(P),
   print_weapon_list(P), nl.
@@ -231,10 +268,10 @@ i_suggested(Who, Where, What) :-
 i_learned(Who, Where, What) :-
   write('Did any other player show you a card?'), nl,
   findall(P, (played_char(P), my_char(Me), P \== Me), Others),
-  select_from_list_none(Others, Player, i_learned), nl, i_was_shown(Player);
+  select_from_list_none(Others, Player, i_learned), nl, nl, i_was_shown(Player), !;
   last_num_choices(i_learned, Num_choices), last_input(i_learned, N), N =:= Num_choices,
-  nobody_shows_card_for(Who, Where, What);
-  write('Not a valid option'), nl, nl, i_learn_from(Player).
+  nobody_shows_suspect(Who), nobody_shows_room(Where), nobody_shows_weapon(What), !;
+  write('Not a valid option'), nl, nl, i_learn(Who, Where, What).
 
 i_was_shown(Player) :-
   writef('Which card did player %d show you?', [Player]), nl,
@@ -243,13 +280,26 @@ i_was_shown(Player) :-
   assert(has_card(Player, Card));
   write('Not a valid option'), nl, nl, i_was_shown(Player).
   
-nobody_shows_card_for(Who, Where, What) :-
-  writef("Nobody showed anything when %d, %d, and %d was suggested\n", [Who, Where, What]).
+nobody_shows_weapon(Card) :-
+  not(missing(Card)), !;
+  assert(envelope_weapon(Card)), 
+  writef("Inferred that %d is the envelope weapon\n", [Card]).
+  
+nobody_shows_room(Card) :-
+  not(missing(Card)), !;
+  assert(envelope_room(Card)), 
+  writef("Inferred that %d is the envelope room\n", [Card]).
+  
+nobody_shows_suspect(Card) :-
+  not(missing(Card)), !;
+  assert(envelope_suspect(Card)), 
+  writef("Inferred that %d is the envelope suspect\n", [Card]).
+  
 % player_suggested(Player, Who, Where, What).
   
 
 main_menu :-
-  solved;
+  deduce_in_envelope, solved;
   write('Choose an option:'), nl,
   findall(Opt, main_menu_option(Opt), Options),
   select_from_list(Options, Choice, main_menu),
