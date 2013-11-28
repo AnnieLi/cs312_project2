@@ -61,17 +61,25 @@ index_zip([Hd|Tl], [[Start,Hd]|Ts], Start) :- N_Start is Start + 1, index_zip(Tl
 
 
 % Game setup menu
-setup :- cleanup, record_my_char, record_played_char, record_order, record_my_cards.
+setup :- 
+  cleanup, record_my_char, record_played_char, record_order, record_my_cards, !.
 
-read_input(Input) :- retractall(last_input(_)), read(Input), assert(last_input(Input)).
-save_menu_size(Num_choices) :- retractall(last_menu_size(_)), assert(last_menu_size(Num_choices)).
+read_input(Input) :- 
+  retractall(last_input(_)), read(Input), assert(last_input(Input)).
 
-cleanup :- retractall(played_char(_)),
-  retractall(next_player(_,_)),
+save_menu_size(Num_choices) :- 
+  retractall(last_menu_size(_)), assert(last_menu_size(Num_choices)).
+
+cleanup :-
   retractall(my_char(_)),
-  retractall(last_input(_)).
+  retractall(played_char(_)),
+  retractall(next_player(_,_)),
+  retractall(has_card(_,_)),
+  retractall(last_input(_)),
+  retractall(last_menu_size(_)).
 
-record_my_char :- write('Which character are you playing?'), nl,
+record_my_char :- 
+  write('Which character are you playing?'), nl,
   findall(C, character(C), Cs),
   index_zip(Cs, Ts, 0),
   foreach(member(T, Ts), writef("%d. %d\n", T)),
@@ -79,7 +87,8 @@ record_my_char :- write('Which character are you playing?'), nl,
   assert(my_char(My_C)), assert(played_char(My_C));
   write('Not a valid option'), nl, record_my_char.
 
-record_played_char :- write('Which other characters are being played?'), nl,
+record_played_char :- 
+  write('Which other characters are being played?'), nl,
   findall(C, (character(C), not(played_char(C))), Not_played),
   length(Not_played, Num_choices),
   save_menu_size(Num_choices),
@@ -93,8 +102,15 @@ record_played_char :- write('Which other characters are being played?'), nl,
   write('There must be at least one other player'), nl, record_played_char;
   write('Not a valid option'), nl, record_played_char.
 
-record_order :- foreach((played_char(C), not(next_player(_, C))), record_next_player(C)).
-record_next_player(P) :- findall(C, (played_char(C), not(next_player(C, _)), C \== P), No_prevs),
+record_order :- 
+  findall(C, played_char(C), Played), length(Played, Num_played), Num_played =:= 2,
+  foreach((played_char(C), not(next_player(_, C))), record_order_2_players(C)).
+record_order :- 
+  foreach((played_char(C), not(next_player(_, C))), record_next_player(C)).
+record_order_2_players(P) :- 
+  played_char(C), P \== C, assert(next_player(C, P)).
+record_next_player(P) :- 
+  findall(C, (played_char(C), C \== P, not(next_player(C, _)), not(next_player(P, C))), No_prevs),
   length(No_prevs, Num_choices),
   save_menu_size(Num_choices),
   Num_choices > 1,
@@ -104,10 +120,11 @@ record_next_player(P) :- findall(C, (played_char(C), not(next_player(C, _)), C \
   read(N), N > -1, N < Num_choices, nth0(N, No_prevs, Next),
   assert(next_player(Next, P));
   last_menu_size(Num_choices), Num_choices =:= 1,
-  played_char(C), not(next_player(C, _)), C \== P, ! , assert(next_player(C, P));
+  played_char(C), C \= P, not(next_player(C, _)), not(next_player(P, C)), assert(next_player(C, P));
   write('Not a valid option'), nl, record_order.
 
-record_my_cards :- write('What are your cards?'),nl,
+record_my_cards :- 
+  write('What are your cards?'),nl,
   findall(C, (valid_card(C), not(has_card(_, C))), Not_mine),
   length(Not_mine, Num_choices),
   save_menu_size(Num_choices),
