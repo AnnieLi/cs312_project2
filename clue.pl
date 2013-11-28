@@ -35,6 +35,9 @@ valid_card(X) :- suspect(X).
 valid_card(X) :- weapon(X).
 valid_card(X) :- room(X).
 
+% the number of all players
+:-dynamic num_players/1.
+
 % played_char(X) is true if suspect is being played as by a player
 :-dynamic my_char/1.
 :-dynamic played_char/1.
@@ -61,13 +64,13 @@ index_zip([Hd|Tl], [[Start,Hd]|Ts], Start) :- N_Start is Start + 1, index_zip(Tl
 
 
 % Game setup menu
-setup :- 
-  cleanup, record_my_char, record_played_char, record_order, record_my_cards, !.
+setup :-
+  cleanup,record_num_players, record_my_char, record_played_char, record_order, record_my_cards, !.
 
-read_input(Input) :- 
+read_input(Input) :-
   retractall(last_input(_)), read(Input), assert(last_input(Input)).
 
-save_menu_size(Num_choices) :- 
+save_menu_size(Num_choices) :-
   retractall(last_menu_size(_)), assert(last_menu_size(Num_choices)).
 
 cleanup :-
@@ -78,7 +81,12 @@ cleanup :-
   retractall(last_input(_)),
   retractall(last_menu_size(_)).
 
-record_my_char :- 
+record_num_players :-
+	write('How many players? (from 2 to 6)'), nl,
+	read(N), N>=2, N<6, assert(num_players(N)), nl;
+	write('Not a valid option'),nl,nl, record_num_players.
+
+record_my_char :-
   write('Which suspect are you playing?'), nl,
   findall(C, suspect(C), Cs),
   index_zip(Cs, Ts, 0),
@@ -87,7 +95,7 @@ record_my_char :-
   assert(my_char(My_C)), assert(played_char(My_C)), nl;
   write('Not a valid option'), nl, nl, record_my_char.
 
-record_played_char :- 
+record_played_char :-
   findall(C, (suspect(C), not(played_char(C))), Not_played),
   length(Not_played, Num_choices),
   save_menu_size(Num_choices),
@@ -104,15 +112,15 @@ record_played_char :-
   write('There must be at least one other player'), nl, nl, record_played_char;
   write('Not a valid option'), nl, nl, record_played_char.
 
-record_order :- 
+record_order :-
   findall(C, played_char(C), Played), length(Played, Num_played), Num_played =:= 2,
   foreach((played_char(C), not(next_player(_,   C))), record_order_2_players(C)), nl.
-record_order :- 
+record_order :-
   foreach((played_char(C), not(next_player(_, C))), record_next_player(C)).
 
-record_order_2_players(P) :- 
+record_order_2_players(P) :-
   played_char(C), P \== C, assert(next_player(C, P)).
-record_next_player(P) :- 
+record_next_player(P) :-
   findall(C, (played_char(C), C \== P, not(next_player(C, _)), not(next_player(P, C))), No_prevs),
   length(No_prevs, Num_choices),
   save_menu_size(Num_choices),
@@ -126,7 +134,7 @@ record_next_player(P) :-
   played_char(C), C \= P, not(next_player(C, _)), not(next_player(P, C)), assert(next_player(C, P));
   write('Not a valid option'), nl, nl, record_order.
 
-record_my_cards :- 
+record_my_cards :-
   write('What are your cards?'),nl,
   findall(C, (valid_card(C), not(has_card(_, C))), Not_mine),
   length(Not_mine, Num_choices),
@@ -146,7 +154,7 @@ missing_room(R) :-
 missing_suspect(S) :-
   suspect(S), not(has_card(_, S)).
 
-solved :- 
+solved :-
   findall(W, missing_weapon(W), Ws),
   length(Ws, Num_ws), Num_ws =:= 1,
   findall(R, missing_room(R), Rs),
@@ -187,7 +195,7 @@ print_suspect_list(P) :-
   foreach((has_card(P, Card), suspect(Card)), writef('   %d\n', [Card])).
 
 
-main_menu :- 
+main_menu :-
   solved;
   write('Choose an option:'), nl,
   findall(Opt, main_menu_option(Opt), Options),
@@ -198,4 +206,4 @@ main_menu :-
   read_input(N), N  >= 0, N < Num_choices,
   nl, option_function(N), nl, main_menu;
   write('Not a valid option'), nl, nl, main_menu.
-  
+
