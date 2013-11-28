@@ -136,3 +136,21 @@ record_my_cards :-
   last_input(N), last_menu_size(Num_choices), Num_choices =:= N;
   write('Not a valid option'), nl, record_my_cards.
 
+missing_weapon(W) :-
+  weapon(W), not(has_card(_, W)).
+missing_room(R) :-
+  room(R), not(has_card(_, R)).
+missing_suspect(S) :-
+  character(S), not(has_card(_, S)).
+
+solved :- 
+  findall(W, missing_weapon(W), Ws),
+  length(Ws, Num_ws), Num_ws =:= 1,
+  findall(R, missing_room(R), Rs),
+  length(Rs, Num_rs), Num_rs =:= 1,
+  findall(S, missing_suspect(S), Ss),
+  length(Ss, Num_ss), Num_ss =:= 1,
+  missing_weapon(What), missing_room(Where), missing_suspect(Who),
+  writef("Hey, all that's left is %d, the %d, and the %d!\n", [Who, What, Where]), !.
+
+
