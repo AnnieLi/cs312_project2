@@ -3,7 +3,6 @@
 % Student Number: 71680094, 34444109
 
 % Game cards
-
 character(mustard).
 character(scarlet).
 character(plum).
@@ -29,13 +28,11 @@ room(lounge).
 room(dining).
 
 % Valid card
-
 valid_card(X) :- character(X).
 valid_card(X) :- weapon(X).
 valid_card(X) :- room(X).
 
 % Game setup
-
 clue :- write('Welcome!'),nl.
 
 % the number of players
@@ -44,6 +41,9 @@ clue :- write('Welcome!'),nl.
 % my cards
 :-dynamic mycards/1.
 :-dynamic menu_opt/1.
+
+% next_player(X,Y) is true if X is the player to the immediate left of Y
+:-dynamic next_player/2.
 
 % Returns the index (1-based) of an element in a list, -1 if element is not in the list
 index_of(X, List, -1) :- not(member(X, List)), !.
@@ -62,10 +62,20 @@ record_num_of_players :- write('How many players are there?'),nl,
 
 record_my_player :- write('Which character are you playing?'), nl,
   findall(C, character(C), Cs),
-  index_zip(Cs, Tuples, 1),
+  index_zip(Cs, Tuples, 0),
   foreach(member(Tuple, Tuples), writef("%d. %d\n", Tuple)),
-  read(N), N > 0, N < 7, Index is N -1, nth0(Index, Cs, My_C),
+  read(N), N > -1, N < 6, nth0(N, Cs, My_C),
   assert(my_character(My_C)).
+
+record_order :- foreach((character(C), not(next_player(_, C))), record_next_player(C)).
+
+record_next_player(P) :- writef('Who is the player to the left of %d?', [P]), nl,
+  findall(C, (character(C), not(next_player(C, _)), C \== P), No_prevs),
+  length(No_prevs, Num_choice),
+  index_zip(No_prevs, Tuples, 0),
+  foreach(member(Tuple, Tuples), writef("%d. %d\n", Tuple)),
+  read(N), N > -1, N < Num_choice, nth0(N, No_prevs, Next),
+  assert(next_player(Next, P)).
 
 record_my_cards :- write('What are your cards?'),nl,
 	read(C), valid_card(C),assert(mycards(C)), record_my_cards;
