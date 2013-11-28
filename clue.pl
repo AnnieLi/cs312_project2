@@ -6,12 +6,12 @@ clue :-
   setup, main_menu.
 
 % Game cards
-character(mustard).
-character(scarlet).
-character(plum).
-character(green).
-character(white).
-character(peacock).
+suspect(mustard).
+suspect(scarlet).
+suspect(plum).
+suspect(green).
+suspect(white).
+suspect(peacock).
 
 weapon(rope).
 weapon(leadpipe).
@@ -31,15 +31,15 @@ room(lounge).
 room(dining).
 
 % Valid card
-valid_card(X) :- character(X).
+valid_card(X) :- suspect(X).
 valid_card(X) :- weapon(X).
 valid_card(X) :- room(X).
 
-% played_char(X) is true if character is being played as by a player
+% played_char(X) is true if suspect is being played as by a player
 :-dynamic my_char/1.
 :-dynamic played_char/1.
 
-% has_card(Player, Card) is true if Player (represented by a character) has Card
+% has_card(Player, Card) is true if Player (represented by a suspect) has Card
 :-dynamic has_card/2.
 
 % next_player(X,Y) is true if X is the player to the immediate left of Y
@@ -79,8 +79,8 @@ cleanup :-
   retractall(last_menu_size(_)).
 
 record_my_char :- 
-  write('Which character are you playing?'), nl,
-  findall(C, character(C), Cs),
+  write('Which suspect are you playing?'), nl,
+  findall(C, suspect(C), Cs),
   index_zip(Cs, Ts, 0),
   foreach(member(T, Ts), writef("%d. %d\n", T)),
   read(N), N  >= 0, N < 6, nth0(N, Cs, My_C),
@@ -88,11 +88,11 @@ record_my_char :-
   write('Not a valid option'), nl, nl, record_my_char.
 
 record_played_char :- 
-  findall(C, (character(C), not(played_char(C))), Not_played),
+  findall(C, (suspect(C), not(played_char(C))), Not_played),
   length(Not_played, Num_choices),
   save_menu_size(Num_choices),
   Num_choices =\= 0,
-  write('Which other characters are being played?'), nl,
+  write('Which other suspects are being played?'), nl,
   index_zip(Not_played, Ts, 0),
   foreach(member(T, Ts), writef("%d. %d\n", T)),
   writef("%d. None of the above\n", [Num_choices]),
@@ -144,7 +144,7 @@ missing_weapon(W) :-
 missing_room(R) :-
   room(R), not(has_card(_, R)).
 missing_suspect(S) :-
-  character(S), not(has_card(_, S)).
+  suspect(S), not(has_card(_, S)).
 
 solved :- 
   findall(W, missing_weapon(W), Ws),
@@ -167,7 +167,24 @@ option_function(1) :-
 
 print_card_list(P) :-
   writef('Player %d has the following cards:\n', [P]),
-  foreach(has_card(P, Card), writef(' %d\n', [Card])), nl.
+  print_weapon_list(P),
+  print_suspect_list(P),
+  print_room_list(P), nl.
+
+print_weapon_list(P) :- findall(Card, (has_card(P, Card), weapon(Card)), Ws), length(Ws, 0).
+print_weapon_list(P) :-
+  write(' weapons:'), nl,
+  foreach((has_card(P, Card), weapon(Card)), writef('   %d\n', [Card])).
+
+print_room_list(P) :- findall(Card, (has_card(P, Card), room(Card)), Ws), length(Ws, 0).
+print_room_list(P) :-
+  write(' rooms:'), nl,
+  foreach((has_card(P, Card), room(Card)), writef('   %d\n', [Card])).
+
+print_suspect_list(P) :- findall(Card, (has_card(P, Card), suspect(Card)), Ws), length(Ws, 0).
+print_suspect_list(P) :-
+  write(' suspects:'), nl,
+  foreach((has_card(P, Card), suspect(Card)), writef('   %d\n', [Card])).
 
 
 main_menu :- 
