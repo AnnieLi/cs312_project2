@@ -2,6 +2,15 @@
 % Name: Edward Soo, Xuan (Annie) Li
 % Student Number: 71680094, 34444109
 
+
+% The program can initialize the clue game setup, keep record of the
+% game, allow the user to see the contents of the database and know when
+% to make an accusation.
+%
+% How to use: compile in SWI-Prolog, and type "clue."
+
+
+% The main procedure
 clue :-
   setup, !, main_menu.
 
